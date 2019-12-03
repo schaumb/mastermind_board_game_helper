@@ -24,6 +24,15 @@ const std::string& getLine(T&& writeIfNeeded) {
     return tmp;
 }
 
+template<typename To, typename T>
+To getLineAndValidate(T&& writeIfNeeded) {
+    while(true) {
+        try {
+            return boost::lexical_cast<To>(getLine(writeIfNeeded));
+        } catch (const boost::bad_lexical_cast&) {}
+    }
+}
+
 template <typename T>
 T count_each_repetable_combination(T elements, T place) {
     if (elements > 0 && place * std::log2l(elements) >= sizeof(T) * 8 - std::is_signed_v<T>)
@@ -96,16 +105,19 @@ result.first -= result.second;
 
 
 int main() {
-    auto names_string_container = getLine("A színek neve space-el elválasztva: ");
-
     std::vector<const char*> names;
-    for (auto pch = std::strtok(names_string_container.data(), " "); pch; pch = std::strtok(nullptr, " "))
-        names.emplace_back(pch);
+    std::string names_string_container;
+    do {
+        names_string_container = getLine("The colors name (separated by spaces): ");
 
-    std::cerr << "Tehát n = " << names.size() << std::endl;
-    const auto k = boost::lexical_cast<std::size_t>(getLine("Kitalálandó helyek száma: "));
-    const auto has_repeat = boost::lexical_cast<bool>(getLine("Lehet duplikált (0/1): ")),
-         can_repeat_guess = has_repeat || boost::lexical_cast<bool>(getLine("Lehet duplikált találás (0/1): "));
+        for (auto pch = std::strtok(names_string_container.data(), " "); pch; pch = std::strtok(nullptr, " "))
+            names.emplace_back(pch);
+    } while (names.empty());
+
+    std::cerr << "-> n = " << names.size() << std::endl;
+    const auto k = getLineAndValidate<std::size_t>("Places to guess: ");
+    const auto has_repeat = getLineAndValidate<bool>("Enabled duplicate (0/1): "),
+         can_repeat_guess = has_repeat || getLineAndValidate<bool>("But can we guess with duplicate (0/1): ");
     
     const auto doIt = [&](auto&& what) {
         if (has_repeat || can_repeat_guess) {
@@ -150,7 +162,7 @@ int main() {
             } 
             return names.at(i);
         });
-        // buta módon kikeressük...
+        // stupid search...
         std::size_t counter{};
         doIt([&counter, &res](auto&& lhs, auto&& rhs) {
             if (std::equal(lhs, rhs, res.begin(), res.end()))
@@ -159,7 +171,7 @@ int main() {
             return false;
         });
         if (counter == possibles.size()/k) {
-            std::cout << "Nem találtam meg :(\n";
+            std::cout << "Can not find this guess :(\n";
             continue;
         }
         std::cout << counter << " [";
