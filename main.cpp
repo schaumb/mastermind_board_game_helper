@@ -209,6 +209,7 @@ int main() {
         // some advice
 
         std::size_t minCount{}, minI = static_cast<std::size_t>(-1);
+        bool isPossible{};
 
         for (auto i = static_cast<decltype(possibleSetCount)>(0); i < possibleSetCount; ++i) {
             auto arr = std::valarray(results[std::slice(i*possibleSetCount, possibleSetCount, 1)]);
@@ -219,9 +220,10 @@ int main() {
                     max = std::max(std::valarray(arr[possibleIndArray && arr == p]).size(), max);
                 }
             }
-            if (minI == static_cast<std::size_t>(-1) || minCount > max) {
+            if (minI == static_cast<std::size_t>(-1) || minCount > max || (minCount == max && !isPossible && possibleIndArray[i])) {
                 minCount = max;
                 minI = i;
+                isPossible = possibleIndArray[i];
             }
         }
         std::cout << "minI: " << minI <<", minCount: " << minCount << std::endl;
