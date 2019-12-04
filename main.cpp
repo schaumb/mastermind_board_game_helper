@@ -95,7 +95,7 @@ auto for_each_repetable_combination(T begin, T end, U count, L&& lambda) {
 template<typename T>
 std::pair<int, int> calc(T b1, T e1, T b2, T e2) {
     std::pair<int, int> result{};
-    boost::range::set_intersection(std::multiset(b1, e1), std::multiset(b2, e2), boost::make_function_output_iterator([&](auto&&) { ++result.first; }));
+    boost::range::set_intersection(std::multiset<std::decay_t<decltype(*b1)>>(b1, e1), std::multiset<std::decay_t<decltype(*b2)>>(b2, e2), boost::make_function_output_iterator([&](auto&&) { ++result.first; }));
 
     result.second = (int)std::count_if(boost::make_zip_iterator(boost::make_tuple(b1, b2)),
         boost::make_zip_iterator(boost::make_tuple(e1, e2)), [](auto&& tup) { return boost::get<0>(tup) == boost::get<1>(tup); });
@@ -114,7 +114,7 @@ int main() {
             names.emplace_back(pch);
     } while (names.empty());
 
-    std::cerr << "-> n = " << names.size() << std::endl;
+    std::cout << "-> n = " << names.size() << std::endl;
     const auto k = getLineAndValidate<std::size_t>("Places to guess: ");
     const auto has_repeat = getLineAndValidate<bool>("Enabled duplicate (0/1): "),
          can_repeat_guess = has_repeat || getLineAndValidate<bool>("But can we guess with duplicate (0/1): ");
@@ -137,18 +137,19 @@ int main() {
         ptr = std::copy(lhs, rhs, ptr);
         return false;
     });
+    auto possibleSetCount = possibles.size() / k;
 
-    std::valarray<std::pair<int, int>> results(possibles.size()/k*possibles.size()/k);
-    std::valarray<bool> possibleIndArray (true, possibles.size()/k);
+    std::valarray<std::pair<int, int>> results(possibleSetCount*possibleSetCount);
+    std::valarray<bool> possibleIndArray (true, possibleSetCount);
     for (auto i = 0ull; i < possibles.size(); i += k) {
         for (auto j = 0ull; j < possibles.size(); j += k) {
-            results[j/k + i*possibles.size()/k/k] = calc(possibles.begin() + i, possibles.begin() + i + k, possibles.begin() + j, possibles.begin() + j + k);
+            results[j/k + i/k*possibleSetCount] = calc(possibles.begin() + i, possibles.begin() + i + k, possibles.begin() + j, possibles.begin() + j + k);
         }
-        if (!has_repeat && can_repeat_guess && std::set(possibles.begin() + i, possibles.begin() + i + k).size() < k)
+        if (!has_repeat && can_repeat_guess && std::set<const char*>(possibles.begin() + i, possibles.begin() + i + k).size() < k)
             possibleIndArray[i/k] = false;
     }
     std::cout << "Results generated: " << results.size() << std::endl;
-    std::valarray<std::size_t> indArray (possibles.size()/k);
+    std::valarray<std::size_t> indArray (possibleSetCount);
     std::iota(std::begin(indArray), std::end(indArray), std::size_t{0});
     while (true) {
         for (std::size_t i = 0; i < names.size(); ++i)
@@ -170,7 +171,7 @@ int main() {
             ++counter;
             return false;
         });
-        if (counter == possibles.size()/k) {
+        if (counter == possibleSetCount) {
             std::cout << "Can not find this guess :(\n";
             continue;
         }
@@ -187,7 +188,7 @@ int main() {
             continue;
         }
 
-        possibleIndArray &= std::valarray(results[std::slice(counter*possibles.size()/k, possibles.size()/k, 1)]) == p;
+        possibleIndArray &= std::valarray(results[std::slice(counter*possibleSetCount, possibleSetCount, 1)]) == p;
         
         std::valarray<std::size_t> currPoss = indArray[possibleIndArray];
         for (auto & index : currPoss) {
@@ -206,6 +207,27 @@ int main() {
         }
         
         // some advice
-        
+
+        std::size_t minCount{}, minI = static_cast<std::size_t>(-1);
+
+        for (auto i = static_cast<decltype(possibleSetCount)>(0); i < possibleSetCount; ++i) {
+            auto arr = std::valarray(results[std::slice(i*possibleSetCount, possibleSetCount, 1)]);
+            std::size_t max = 0;
+            for (std::decay_t<decltype(k)> j = 0; j <= k; ++j) {
+                for (std::decay_t<decltype(k)> l = 0; l <= k - j; ++l) {
+                    auto p = std::pair{int(j), int(l)};
+                    max = std::max(std::valarray(arr[possibleIndArray && arr == p]).size(), max);
+                }
+            }
+            if (minI == static_cast<std::size_t>(-1) || minCount > max) {
+                minCount = max;
+                minI = i;
+            }
+        }
+        std::cout << "minI: " << minI <<", minCount: " << minCount << std::endl;
+        for (auto from = possibles.begin() + minI*k, to = possibles.begin() + minI*k + k; from != to; ++from) {
+            std::cout << *from << " ";
+        }
+        std::cout << std::endl;
     }
 }
