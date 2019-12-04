@@ -14,7 +14,9 @@
 #include <type_traits>
 #include <valarray>
 #include <sstream>
+#include <unordered_set>
 #include "combinations.h"
+#include "hash_map.hpp"
 
 template<typename T>
 const std::string& getLine(T&& writeIfNeeded) {
@@ -92,18 +94,6 @@ auto for_each_repetable_combination(T begin, T end, U count, L&& lambda) {
 }
 
 
-template<typename T>
-std::pair<int, int> calc(T b1, T e1, T b2, T e2) {
-    std::pair<int, int> result{};
-    boost::range::set_intersection(std::multiset<std::decay_t<decltype(*b1)>>(b1, e1), std::multiset<std::decay_t<decltype(*b2)>>(b2, e2), boost::make_function_output_iterator([&](auto&&) { ++result.first; }));
-
-    result.second = (int)std::count_if(boost::make_zip_iterator(boost::make_tuple(b1, b2)),
-        boost::make_zip_iterator(boost::make_tuple(e1, e2)), [](auto&& tup) { return boost::get<0>(tup) == boost::get<1>(tup); });
-result.first -= result.second;
-    return result;
-}
-
-
 int main() {
     std::vector<const char*> names;
     std::string names_string_container;
@@ -115,6 +105,7 @@ int main() {
     } while (names.empty());
 
     std::cout << "-> n = " << names.size() << std::endl;
+
     const auto k = getLineAndValidate<std::size_t>("Places to guess: ");
     const auto has_repeat = getLineAndValidate<bool>("Enabled duplicate (0/1): "),
          can_repeat_guess = has_repeat || getLineAndValidate<bool>("But can we guess with duplicate (0/1): ");
@@ -138,19 +129,37 @@ int main() {
         return false;
     });
     auto possibleSetCount = possibles.size() / k;
+    
+    auto calc = [myHash = [mh = std::hash<std::uintptr_t>{}](const char* lhs) {
+        return mh(reinterpret_cast<std::uintptr_t>(lhs));
+    }](auto& result, auto b1, auto e1, auto b2, auto e2) {
+        emilib::HashMap<const char*, int, decltype(myHash)> uoms{b1, e1, myHash};
+
+        for (; b2 != e2; ++b2,++b1) {
+            if (*b1 == *b2)
+                --result.first, ++result.second;
+            if (auto&& it = uoms.find(*b2); it != std::end(uoms) && --it->second>=0)
+                ++result.first;
+        }
+    };
 
     std::valarray<std::pair<int, int>> results(possibleSetCount*possibleSetCount);
     std::valarray<bool> possibleIndArray (true, possibleSetCount);
     for (auto i = 0ull; i < possibles.size(); i += k) {
         for (auto j = 0ull; j < possibles.size(); j += k) {
-            results[j/k + i/k*possibleSetCount] = calc(possibles.begin() + i, possibles.begin() + i + k, possibles.begin() + j, possibles.begin() + j + k);
+            calc(results[j/k + i/k*possibleSetCount],
+                possibles.begin() + i,
+                possibles.begin() + i + k,
+                possibles.begin() + j,
+                possibles.begin() + j + k);
         }
-        if (!has_repeat && can_repeat_guess && std::set<const char*>(possibles.begin() + i, possibles.begin() + i + k).size() < k)
+        if (!has_repeat && can_repeat_guess && std::unordered_set<const char*>(possibles.begin() + i, possibles.begin() + i + k).size() < k)
             possibleIndArray[i/k] = false;
     }
     std::cout << "Results generated: " << results.size() << std::endl;
     std::valarray<std::size_t> indArray (possibleSetCount);
     std::iota(std::begin(indArray), std::end(indArray), std::size_t{0});
+
     while (true) {
         for (std::size_t i = 0; i < names.size(); ++i)
             std::cout << "(" << i << "): " << names[i] << std::endl;
@@ -175,15 +184,16 @@ int main() {
             std::cout << "Can not find this guess :(\n";
             continue;
         }
+
         std::cout << counter << " [";
         std::copy(possibles.begin() + counter*k, possibles.begin() + counter*k+k, std::ostream_iterator<decltype(*possibles.begin())>(std::cout, " "));
         std::cout << "]\n";
 
 
-        ss = std::istringstream{getLine("Result: ")};
-        auto ii2 = std::istream_iterator<int>(ss);
+        std::istringstream ss2 = std::istringstream{getLine("Result: ")};
+        auto ii2 = std::istream_iterator<int>(ss2);
         std::pair<int, int> p{*ii2, 0}; p.second = *++ii2;
-        if (!static_cast<bool>(ss) || static_cast<std::size_t>(p.first + p.second) > k) {
+        if (!static_cast<bool>(ss2) || static_cast<std::size_t>(p.first + p.second) > k) {
             std::cout << "INVALID result :(\n";
             continue;
         }
@@ -206,6 +216,7 @@ int main() {
             break;
         }
         
+        std::cout << "Current possible solution count: " << currPoss.size() << std::endl;
         // some advice
 
         std::size_t minCount{}, minI = static_cast<std::size_t>(-1);
