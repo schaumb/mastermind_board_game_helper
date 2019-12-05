@@ -107,7 +107,7 @@ int main() {
     std::cout << "-> n = " << names.size() << std::endl;
 
     const auto k = getLineAndValidate<std::size_t>("Places to guess: ");
-    const auto has_repeat = getLineAndValidate<bool>("Enabled duplicate (0/1): "),
+    const auto has_repeat = k > names.size() || getLineAndValidate<bool>("Enabled duplicate (0/1): "),
          can_repeat_guess = has_repeat || getLineAndValidate<bool>("But can we guess with duplicate (0/1): ");
     
     const auto doIt = [&](auto&& what) {
@@ -141,64 +141,133 @@ int main() {
             if (auto&& it = uoms.find(*b2); it != std::end(uoms) && --it->second>=0)
                 ++result.first;
         }
+        return (result);
     };
 
     std::valarray<std::pair<int, int>> results(possibleSetCount*possibleSetCount);
-    std::valarray<bool> possibleIndArray (true, possibleSetCount);
+    std::valarray<bool> possibleIndArrayOrig (true, possibleSetCount);
     for (auto i = 0ull; i < possibles.size(); i += k) {
-        for (auto j = 0ull; j < possibles.size(); j += k) {
-            calc(results[j/k + i/k*possibleSetCount],
+        results[i/k + i/k*possibleSetCount] = {0, k};
+        for (auto j = i+k; j < possibles.size(); j += k) {
+            results[i/k + j/k*possibleSetCount] = calc(results[j/k + i/k*possibleSetCount],
                 possibles.begin() + i,
                 possibles.begin() + i + k,
                 possibles.begin() + j,
                 possibles.begin() + j + k);
         }
         if (!has_repeat && can_repeat_guess && std::unordered_set<const char*>(possibles.begin() + i, possibles.begin() + i + k).size() < k)
-            possibleIndArray[i/k] = false;
+            possibleIndArrayOrig[i/k] = false;
     }
     std::cout << "Results generated: " << results.size() << std::endl;
     std::valarray<std::size_t> indArray (possibleSetCount);
     std::iota(std::begin(indArray), std::end(indArray), std::size_t{0});
 
-    while (true) {
-        for (std::size_t i = 0; i < names.size(); ++i)
-            std::cout << "(" << i << "): " << names[i] << std::endl;
-        std::istringstream ss{getLine("GuessedLine indices: ")};
-        auto ii = std::istream_iterator<std::size_t>(ss);
-        std::vector<const char*> res(k);
-        std::transform(ii, std::istream_iterator<std::size_t>(), res.begin(), [&](auto&& i) -> const char* {
-            if (i >= names.size()) {
-                return nullptr;
-            } 
-            return names.at(i);
-        });
-        // stupid search...
-        std::size_t counter{};
-        doIt([&counter, &res](auto&& lhs, auto&& rhs) {
-            if (std::equal(lhs, rhs, res.begin(), res.end()))
+    auto findByVector = [](auto& counter, const auto& vec) {
+        return [&counter, b = vec.begin(), e = vec.end()](auto&& lhs, auto&& rhs) {
+            if (std::equal(lhs, rhs, b, e))
                 return true;
             ++counter;
             return false;
-        });
-        if (counter == possibleSetCount) {
-            std::cout << "Can not find this guess :(\n";
-            continue;
+        };
+    };
+    
+    std::cout << "Start possible count: " << std::valarray(possibleIndArrayOrig[possibleIndArrayOrig]).size() << std::endl;
+
+    std::valarray<bool> possibleIndArray = possibleIndArrayOrig;
+    std::optional<std::size_t> index{};
+    while (true) {
+        // some advice
+
+        std::size_t minCount{}, minI = static_cast<std::size_t>(-1);
+        std::pair<int, int> minPair{};
+        bool isPossible{};
+
+        for (auto i = static_cast<decltype(possibleSetCount)>(0); i < possibleSetCount; ++i) {
+            auto arr = std::valarray(results[std::slice(i*possibleSetCount, possibleSetCount, 1)]);
+            std::size_t max = 0;
+            std::pair<int, int> maxPair{};
+            for (std::decay_t<decltype(k)> j = 0; j <= k; ++j) {
+                for (std::decay_t<decltype(k)> l = 0; l <= k - j; ++l) {
+                    auto p = std::pair{int(j), int(l)};
+                    auto c = std::valarray(arr[possibleIndArray && arr == p]).size();
+                    if (c > max) {
+                        maxPair = p;
+                        max = c;
+                    }
+                }
+            }
+            if (minI == static_cast<std::size_t>(-1) || minCount > max || (minCount == max && !isPossible && possibleIndArray[i])) {
+                minCount = max;
+                minI = i;
+                isPossible = possibleIndArray[i];
+                minPair = maxPair;
+            }
         }
-
-        std::cout << counter << " [";
-        std::copy(possibles.begin() + counter*k, possibles.begin() + counter*k+k, std::ostream_iterator<decltype(*possibles.begin())>(std::cout, " "));
-        std::cout << "]\n";
-
-
-        std::istringstream ss2 = std::istringstream{getLine("Result: ")};
-        auto ii2 = std::istream_iterator<int>(ss2);
-        std::pair<int, int> p{*ii2, 0}; p.second = *++ii2;
-        if (!static_cast<bool>(ss2) || static_cast<std::size_t>(p.first + p.second) > k) {
-            std::cout << "INVALID result :(\n";
-            continue;
+        std::cout << "minI: " << minI <<", minCount: " << minCount << " if result is: " << minPair.first << "," << minPair.second << std::endl;
+        for (auto from = possibles.begin() + minI*k, to = possibles.begin() + minI*k + k; from != to; ++from) {
+            std::cout << *from << " ";
         }
+        std::cout << std::endl;
 
-        possibleIndArray &= std::valarray(results[std::slice(counter*possibleSetCount, possibleSetCount, 1)]) == p;
+        std::optional<std::size_t> guess {minI};
+        std::pair<int, int> result{};
+        do {
+            if (!guess) {
+                for (std::size_t i = 0; i < names.size(); ++i)
+                    std::cout << "(" << i << "): " << names[i] << std::endl;
+                std::istringstream ss{getLine("GuessedLine indices: ")};
+                auto ii = std::istream_iterator<std::size_t>(ss);
+                std::vector<const char*> res(k);
+                std::transform(ii, std::istream_iterator<std::size_t>(), res.begin(), [&](auto&& i) -> const char* {
+                    if (i >= names.size()) {
+                        return nullptr;
+                    } 
+                    return names.at(i);
+                });
+                // stupid search...
+                std::size_t counter{};
+                doIt(findByVector(counter, res));
+                if (counter == possibleSetCount) {
+                    std::cout << "Can not find this guess :(\n";
+                    continue;
+                }
+
+                std::cout << counter << " [";
+                std::copy(possibles.begin() + counter*k, possibles.begin() + counter*k+k, std::ostream_iterator<decltype(*possibles.begin())>(std::cout, " "));
+                std::cout << "]\n";
+                
+                guess = counter;
+            }
+            
+            // calculate worst result: 
+            {
+                auto arr = std::valarray(results[std::slice((*guess)*possibleSetCount, possibleSetCount, 1)]);
+                std::size_t max = 0;
+                std::pair<int, int> maxPair{};
+                for (std::decay_t<decltype(k)> j = 0; j <= k; ++j) {
+                    for (std::decay_t<decltype(k)> l = 0; l <= k - j; ++l) {
+                        auto p = std::pair{int(j), int(l)};
+                        auto c = std::valarray(arr[possibleIndArray && arr == p]).size();
+                        if (c > max) {
+                            maxPair = p;
+                            max = c;
+                        }
+                    }
+                }
+                std::cout << "Worst thing to do is: " << max << " aka: " << maxPair.first << "," << maxPair.second << std::endl;
+            }
+
+            std::istringstream ss2 = std::istringstream{getLine("Result: ")};
+            ss2 >> result.first >> result.second;
+
+            if (!static_cast<bool>(ss2) || static_cast<std::size_t>(result.first + result.second) > k) {
+                std::cout << "INVALID result :(\n";
+                guess.reset();
+                continue;
+            }
+        } while(!guess);
+
+        possibleIndArray &= std::valarray(results[std::slice((*guess)*possibleSetCount, possibleSetCount, 1)]) == result;
         
         std::valarray<std::size_t> currPoss = indArray[possibleIndArray];
         for (auto & index : currPoss) {
@@ -215,32 +284,6 @@ int main() {
             std::cout << "NO SOLUTION" << std::endl;
             break;
         }
-        
         std::cout << "Current possible solution count: " << currPoss.size() << std::endl;
-        // some advice
-
-        std::size_t minCount{}, minI = static_cast<std::size_t>(-1);
-        bool isPossible{};
-
-        for (auto i = static_cast<decltype(possibleSetCount)>(0); i < possibleSetCount; ++i) {
-            auto arr = std::valarray(results[std::slice(i*possibleSetCount, possibleSetCount, 1)]);
-            std::size_t max = 0;
-            for (std::decay_t<decltype(k)> j = 0; j <= k; ++j) {
-                for (std::decay_t<decltype(k)> l = 0; l <= k - j; ++l) {
-                    auto p = std::pair{int(j), int(l)};
-                    max = std::max(std::valarray(arr[possibleIndArray && arr == p]).size(), max);
-                }
-            }
-            if (minI == static_cast<std::size_t>(-1) || minCount > max || (minCount == max && !isPossible && possibleIndArray[i])) {
-                minCount = max;
-                minI = i;
-                isPossible = possibleIndArray[i];
-            }
-        }
-        std::cout << "minI: " << minI <<", minCount: " << minCount << std::endl;
-        for (auto from = possibles.begin() + minI*k, to = possibles.begin() + minI*k + k; from != to; ++from) {
-            std::cout << *from << " ";
-        }
-        std::cout << std::endl;
     }
 }
