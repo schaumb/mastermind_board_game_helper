@@ -69,6 +69,25 @@ auto count_each_repetable_permutation(T begin, T end, U place_begin, U place_end
     return count_each_repetable_permutation(begin, end, std::distance(place_begin, place_end));
 }
 
+template<typename T, typename It>
+auto get_index_repetable_permutation(T elements, T place, It placeIt) {
+    static_assert(std::is_same_v<T, typename std::iterator_traits<It>::value_type>, "Need To T type");
+    T result{};
+    for (; place; --place, ++placeIt) {
+        (result *= elements) += *placeIt;
+    }
+    return result;
+}
+
+template<typename T, typename U>
+auto get_index_repetable_permutation(T begin, T end, U place_begin, U place_end) {
+    return get_index_repetable_permutation<std::uintmax_t>(
+                std::distance(begin, end),
+                std::distance(place_begin, place_end),
+                boost::make_transform_iterator(boost::make_counting_iterator(place_begin), [begin](auto it) -> std::uintmax_t { return std::distance(begin, *it.base()); })
+            );
+}
+
 template<typename T, typename U, typename L>
 auto for_each_repetable_permutation_impl(T begin, T end, U place_begin, U place_end, L&& lambda) {
     std::fill(place_begin, place_end, begin);
@@ -469,7 +488,44 @@ auto merged(ElementIt eBegin, ElementIt eMiddle, ElementIt eEnd, U placeCount, L
     return merged(eBegin, eMiddle, eEnd, place.begin(), place.end(), std::forward<Lambda>(l));
 }
 
+template<typename T, typename ToIndex = decltype(identity)>
+auto get_index_combination(T , T , T , ToIndex&&  = identity) {
+    // ...
+    return std::size_t{};
+}
+
+template<typename T, typename ToIndex = decltype(identity)>
+auto get_index_permutation(T , T , T , ToIndex&& = identity) {
+    // ...
+    return std::size_t{};
+}
+
 bool test() {
+    std::string s="abcdef";
+    std::size_t c{};
+    std::cout <<count_each_combination(2, 3) << std::endl;
+    std::cin.get();
+    std::cout << count_each_combination(3, 3) << std::endl;
+    for_each_combination(s.begin(), s.begin()+3, s.end(), [&c, &s](auto from, auto to) {
+        std::cout << get_index_combination(from, to, s.end(), [](auto&& c) { return c - 'a'; }) << " ";
+        std::cout << c++ << " ";
+        std::cout << "[";
+        if (from != to) std::cout << *from;
+        while(from != to) if (++from != to) std::cout << " " << *from;
+        std::cout << "]\n";
+        return false;
+    });
+    c=0;
+    std::cout << count_each_permutation(3, 3) << std::endl;
+    for_each_permutation(s.begin(), s.begin()+3, s.end(), [&c](auto from, auto to) {
+        //std::cout << get_index_repetable_permutation(s.begin(), s.end(), from, to) << " ";
+        std::cout << c++ << " ";
+        std::cout << "[";
+        if (from != to) std::cout << *from;
+        while(from != to) if (++from != to) std::cout << " " << *from;
+        std::cout << "]\n";
+        return false;
+    });
     return true;
 }
 
