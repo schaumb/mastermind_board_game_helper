@@ -349,9 +349,9 @@ count_each_multi_combination(BidirIter first, BidirIter mid, BidirIter last, Equ
 }
 
 [[maybe_unused]]
-auto i = [](auto&& vs) -> decltype(vs) { return vs; };
-template<typename T, typename UIt = decltype(i) >
-void dump(T it, std::size_t n, UIt tr = i) {
+auto identity = [](auto&& vs) -> decltype(vs) { return vs; };
+template<typename T, typename UIt = decltype(identity) >
+void dump(T it, std::size_t n, UIt tr = identity) {
     std::cout << "[";
     if (n) std::cout << tr(*it);
     while (--n > 0) std::cout << " " << tr(*++it);
@@ -800,11 +800,11 @@ struct GuessRecursive {
             for (std::decay_t<decltype(placesToGuess)> j = 0; !skip && j <= placesToGuess; ++j) {
                 for (std::decay_t<decltype(placesToGuess)> l = 0; !skip && l <= placesToGuess - j - (j <= 1); ++l) {
                     auto p = std::pair{int(j), int(l)};
-                    if (auto best = (*this)(possibleIndArray && arr == p, level-1, maxLevel)) {
-                        if (!max || *max < *best) {
-                            max = best;
+                    if (auto childBest = (*this)(possibleIndArray && arr == p, level - 1, maxLevel)) {
+                        if (!max || *max < *childBest) {
+                            max = childBest;
                         }
-                        ss << std::string((*maxLevel-level)*2, ' ') << "At level " << (*maxLevel-level) << ": "  << "current max:" << *max << " bests: " << *best << " at " << p.first << "," << p.second << std::endl;         
+                        ss << std::string((*maxLevel-level)*2, ' ') << "At level " << (*maxLevel-level) << ": " << "current max:" << *max << " bests: " << *childBest << " at " << p.first << "," << p.second << std::endl;
                     }
                     if (max && best && *max >= gMin)
                         skip = true;
@@ -1008,30 +1008,30 @@ struct Game {
         
         while (true) {
             // some advice
-            std::optional<std::size_t> guess;
-            std::pair<int, int> result{};
+            std::optional<std::size_t> guessing;
+            std::pair<int, int> resultPair{};
             do {
-                while (!guess) {
-                    guess = this->guess(possibleIndArray);
+                while (!guessing) {
+                    guessing = guess(possibleIndArray);
                 }
                 
                 
                 if (index) {
-                    result = results[(*guess)*possibleSetCount + *index];
-                } else if (auto res = this->result(possibleIndArray, *guess)) {
-                    result = *res;
+                    resultPair = results[(*guessing) * possibleSetCount + *index];
+                } else if (auto res = result(possibleIndArray, *guessing)) {
+                    resultPair = *res;
                 } else {
-                    guess.reset();
+                    guessing.reset();
                 }
-            } while(!guess);
-            std::cout << "Result is: " << result.first << " " << result.second << std::endl;
+            } while(!guessing);
+            std::cout << "Result is: " << resultPair.first << " " << resultPair.second << std::endl;
 
-            possibleIndArray &= std::valarray(results[std::slice((*guess)*possibleSetCount, possibleSetCount, 1)]) == result;
+            possibleIndArray &= std::valarray(results[std::slice((*guessing) * possibleSetCount, possibleSetCount, 1)]) == resultPair;
             
             std::valarray<std::size_t> currPoss = indArray[possibleIndArray];
             std::size_t currentCount = currPoss.size();
-            for (auto & index : std::valarray(currPoss[std::slice(0, std::min(10ul, currentCount), 1)])) {
-                for (auto from = possibles.begin() + index*placesToGuess, to = possibles.begin() + (index+1)*placesToGuess; from != to; ++from) {
+            for (auto & guessIndex : std::valarray(currPoss[std::slice(0, std::min(10ul, currentCount), 1)])) {
+                for (auto from = possibles.begin() + guessIndex * placesToGuess, to = possibles.begin() + (guessIndex + 1) * placesToGuess; from != to; ++from) {
                     std::cout << *from << " ";
                 }
                 std::cout << std::endl;
@@ -1041,7 +1041,7 @@ struct Game {
             
             if (currentCount == 1) {
                 std::cout << "FOUND SOLUTION" << std::endl;
-                if (*std::begin(currPoss) != *guess)
+                if (*std::begin(currPoss) != *guessing)
                     ++nTh;
                 return nTh;
             } else if (currentCount == 0) {
@@ -1122,7 +1122,7 @@ struct Tree {
         
         void operator()(const Tree& t, int level = 0) {
             if (others)
-                for (auto&& [pair, node] : childs)
+                for (auto& node : boost::adaptors::values(childs))
                     node(t, level+1);
         }
     };
@@ -1229,7 +1229,7 @@ int main() {
         };
         walker(walker, *nodePtr);
     } else if (true) {
-        GuessStrategyIn<decltype(doIt)> guessStr{k, possibleSetCount, names, possibles, doIt};
+        //GuessStrategyIn<decltype(doIt)> guessStr{k, possibleSetCount, names, possibles, doIt};
     
         FinalNo finalStr;
         // FinalIn finalStr{possibleSetCount};
@@ -1247,7 +1247,7 @@ int main() {
             }
         } while (finalStr.hasNext());
     } else {
-        GuessRecursive guessStr{k, possibleSetCount, possibles, results};
+        //GuessRecursive guessStr{k, possibleSetCount, possibles, results};
         if (auto bestlevel2 = guessStr(possibleIndArrayOrig/*, 2*/)) {
             std::cout << *bestlevel2 << std::endl;
         }
